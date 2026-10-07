@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Casacustodia - Planificador de Visitas</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#15803d">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            900: '#14532d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #f3f4f6;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* Ocultar barra de desplazamiento para un look más nativo */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+        .view-transition {
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        .hidden-view {
+            display: none !important;
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        .active-view {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
+        }
+        /* Estilos para el Toast (Notificaciones) */
+        #toast-container {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            animation: slideUp 0.3s ease forwards;
+        }
+        .toast.success { background-color: #10b981; }
+        .toast.error { background-color: #ef4444; }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(20px); }
+        }
+        @media print {
+            header, .no-print, #toast-container { display: none !important; }
+            body { background: white; overflow: visible; height: auto; }
+            main { overflow: visible; }
+            #view-detail { padding: 0 !important; margin: 0 !important; transform: none !important; display: block !important; opacity: 1 !important; }
+            #detail-content { border: none !important; box-shadow: none !important; padding: 0 !important; }
+            .bg-slate-50 { background-color: transparent !important; border: 1px solid #e2e8f0; }
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased h-screen flex flex-col overflow-hidden">
+
+    <!-- Header App -->
+    <header class="bg-brand-700 text-white shadow-md z-10 shrink-0">
+        <div class="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3 cursor-pointer" onclick="app.showView('dashboard')">
+                <div class="bg-white text-brand-700 w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xl shadow-inner">
+                    C
+                </div>
+                <h1 class="text-xl font-semibold tracking-tight">Casacustodia</h1>
+            </div>
+            <div class="flex items-center gap-3 sm:gap-4">
+                <button onclick="app.showView('clients')" class="px-3 py-1.5 bg-brand-800 text-brand-50 hover:bg-brand-900 rounded-lg text-sm font-medium transition flex items-center gap-2 border border-brand-600">
+                    <i class="fa-solid fa-address-book"></i> <span class="hidden sm:inline">Clientes</span>
+                </button>
+                <button class="w-10 h-10 rounded-full bg-brand-600 hover:bg-brand-500 transition flex items-center justify-center">
+                    <i class="fa-solid fa-user"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area (Scrollable) -->
+    <main class="flex-1 overflow-y-auto relative w-full">
+        <div class="max-w-3xl mx-auto bg-white min-h-full shadow-sm">
+            
+            <!-- VISTA: DASHBOARD -->
+            <section id="view-dashboard" class="view-transition active-view p-4 sm:p-6 pb-24">
+                <div class="flex justify-between items-end mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">Tus Visitas</h2>
+                        <p class="text-slate-500 text-sm mt-1">Próximos mantenimientos y trabajos</p>
+                    </div>
+                    <button onclick="app.showView('form')" class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg shadow transition flex items-center gap-2 font-medium">
+                        <i class="fa-solid fa-plus"></i> <span class="hidden sm:inline">Nueva Visita</span>
+                    </button>
+                </div>
+
+                <!-- Filtros -->
+                <div class="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide">
+                    <button class="px-4 py-1.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200 text-sm font-medium whitespace-nowrap">Todas</button>
+                    <button class="px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-sm font-medium whitespace-nowrap">Pendientes</button>
+                    <button class="px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-sm font-medium whitespace-nowrap">Completadas</button>
+                </div>
+
+                <!-- Lista de Visitas -->
+                <div id="visits-list" class="space-y-4">
+                    <!-- Las visitas se inyectan aquí via JS -->
+                </div>
+            </section>
+
+            <!-- VISTA: FORMULARIO NUEVA VISITA -->
+            <section id="view-form" class="view-transition hidden-view p-4 sm:p-6 pb-24">
+                <div class="flex items-center gap-3 mb-6">
+                    <button onclick="app.showView('dashboard')" class="text-slate-500 hover:text-slate-800 w-10 h-10 rounded-full hover:bg-slate-100 transition flex items-center justify-center">
+                        <i class="fa-solid fa-arrow-left text-xl"></i>
+                    </button>
+                    <h2 class="text-2xl font-bold text-slate-800">Planificar Visita</h2>
+                </div>
+
+                <form id="visit-form" onsubmit="app.saveVisit(event)">
+                    
+                    <!-- 1. Datos Generales -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
+                        <h3 class="font-semibold text-slate-700 mb-4 flex items-center gap-2"><i class="fa-solid fa-file-lines text-brand-500"></i> Datos Generales</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-600 mb-1">Cliente / Propiedad *</label>
+                                <div class="flex gap-2">
+                                    <select id="f_client_id" required class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition bg-white">
+                                        <!-- Opciones cargadas via JS -->
+                                    </select>
+                                    <button type="button" onclick="app.showView('client-form')" class="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-300 transition flex items-center justify-center shadow-sm" title="Nuevo Cliente">
+                                        <i class="fa-solid fa-plus"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-600 mb-1">Fecha y Hora Programada *</label>
+                                <input type="datetime-local" id="f_datetime" required class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-600 mb-1">Técnico/Equipo Asignado</label>
+                                <input type="text" id="f_tech" placeholder="Ej. Juan Gómez / Equipo Jardinería" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-600 mb-1">Prioridad</label>
+                                <select id="f_priority" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition bg-white">
+                                    <option value="Baja">Baja (Rutina)</option>
+                                    <option value="Media" selected>Media (Mantenimiento)</option>
+                                    <option value="Alta">Alta (Emergencia/Avería)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Tareas a Realizar (Checklists) -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 mb-6 shadow-sm">
+                        <h3 class="font-semibold text-slate-700 mb-4 flex items-center gap-2"><i class="fa-solid fa-list-check text-brand-500"></i> Trabajos a Realizar</h3>
+                        
+                        <div class="space-y-4">
+                            <!-- Categoría Seguridad -->
+                            <div class="border border-slate-100 rounded-lg overflow-hidden">
+                                <div class="bg-slate-100 px-4 py-2 font-medium text-slate-700 text-sm flex items-center gap-2">
+                                    <i class="fa-solid fa-shield-halved text-blue-600 w-5"></i> Seguridad y CCTV
+                                </div>
+                                <div class="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="tasks" value="Instalación/Revisión Cámaras" class="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"> Instalación/Revisión Cámaras</label>
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="tasks" value="Configuración DVR/NVR" class="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"> Configuración DVR/NVR</label>
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="tasks" value="Mantenimiento Alarmas" class="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"> Mantenimiento Alarmas</label>
+                                </div>
+                            </div>
+
+                            <!-- Categoría Automatización -->
+                            <div class="border border-slate-100 rounded-lg overflow-hidden">
+                                <div class="bg-slate-100 px-4 py-2 font-medium text-slate-700 text-sm flex items-center gap-2">
+                                    <i class="fa-solid fa-torii-gate text-purple-600 w-5"></i> Automatización
+                                </div>
+                                <div class="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="tasks" value="Revisión motor portón" class="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"> Revisión motor portón</label>
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="tasks" value="Programación controles" class="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"> Programación controles</label>
+                                </div>
+                            </div>
+
+                            <!-- Categoría Electricidad -->
+                            <div class="border border-slate-100 rounded-lg overflow-hidden">
+                                <div class="bg-slate-100 px-4 py-2 font-medium text-slate-700 text-sm flex items-center gap-2">
+                                    <i class="fa-solid fa-bolt text-yellow-500 w-5"></i> Electricidad
+                                </div>
+                                <div class="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="tasks" value="Revisión tableros" class="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"> Revisión tableros</label>
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="tasks" value="Cambio luminarias/enchufes" class="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"> Cambio luminarias/enchufes</label>
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="tasks" value="Trazado canalización" class="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"> Trazado canalización</label>
+                                </div>
+                            </div>
+
+                            <!-- Categoría Jardinería -->
+                            <div class="border border-slate-100 rounded-lg overflow-hidden">
+                                <div class="bg-slate-100 px-4 py-2 font-medium text-slate-700 text-sm flex items-center gap-2">
+                                    <i class="fa-solid fa-leaf text-green-600 w-5"></i> Jardinería y Exterior
+                                </div>
+                                <div class="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="tasks" value="Corte de pasto y orillado" class="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"> Corte de pasto y orillado</label>
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="tasks" value="Poda árboles/arbustos" class="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"> Poda árboles/arbustos</label>
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="tasks" value="Limpieza canaletas" class="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"> Limpieza canaletas</label>
+                                </div>
+                            </div>
+
+                            <!-- Categoría Limpieza -->
+                            <div class="border border-slate-100 rounded-lg overflow-hidden">
+                                <div class="bg-slate-100 px-4 py-2 font-medium text-slate-700 text-sm flex items-center gap-2">
+                                    <i class="fa-solid fa-broom text-teal-600 w-5"></i> Aseo y Limpieza
+                                </div>
+                                <div class="p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="tasks" value="Limpieza profunda interior" class="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"> Limpieza profunda interior</label>
+                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="tasks" value="Sanitización baños/cocina" class="rounded text-brand-600 focus:ring-brand-500 h-4 w-4"> Sanitización baños/cocina</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Materiales e Insumos -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 mb-6 shadow-sm">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="font-semibold text-slate-700 flex items-center gap-2"><i class="fa-solid fa-boxes-stacked text-brand-500"></i> Materiales e Insumos</h3>
+                            <button type="button" onclick="app.addMaterialRow()" class="text-sm bg-slate-100 hover:bg-slate-200 text-brand-700 px-3 py-1.5 rounded font-medium transition">
+                                <i class="fa-solid fa-plus"></i> Agregar Fila
+                            </button>
+                        </div>
+                        
+                        <!-- Contenedor dinámico de materiales -->
+                        <div id="materials-container" class="space-y-3">
+                            <!-- Fila inicial vacía por defecto generada por JS -->
+                        </div>
+                        <p class="text-xs text-slate-500 mt-3 italic">* Registra insumos consumibles (cable, fertilizante, cloro) o uso de herramientas pesadas.</p>
+                    </div>
+
+                    <!-- 4. Observaciones -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 mb-8 shadow-sm">
+                        <h3 class="font-semibold text-slate-700 mb-4 flex items-center gap-2"><i class="fa-regular fa-comment-dots text-brand-500"></i> Observaciones</h3>
+                        <textarea id="f_notes" rows="3" placeholder="Detalles adicionales, recomendaciones al cliente, insumos faltantes para la próxima vez..." class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition resize-none"></textarea>
+                    </div>
+
+                    <!-- 5. Registro Fotográfico -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 mb-8 shadow-sm">
+                        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4">
+                            <h3 class="font-semibold text-slate-700 flex items-center gap-2"><i class="fa-solid fa-camera text-brand-500"></i> Registro Fotográfico</h3>
+                            <label class="cursor-pointer text-sm bg-slate-100 hover:bg-slate-200 text-brand-700 px-4 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 border border-slate-300">
+                                <i class="fa-solid fa-camera-rotate"></i> Tomar / Subir Foto
+                                <!-- accept="image/*" y capture="environment" activan la cámara del celular -->
+                                <input type="file" id="f_photos" accept="image/*" capture="environment" multiple class="hidden" onchange="app.handlePhotoUpload(event)">
+                            </label>
+                        </div>
+                        
+                        <!-- Contenedor de previsualización -->
+                        <div id="photo-preview-container" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <p class="text-xs text-slate-400 col-span-full italic">No hay fotos adjuntas.</p>
+                        </div>
+                    </div>
+
+                    <!-- Botones de Acción Formulario -->
+                    <div class="flex gap-3">
+                        <button type="button" onclick="app.showView('dashboard')" class="flex-1 px-4 py-3 bg-white border border-slate-300 text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition shadow-sm">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="flex-[2] px-4 py-3 bg-brand-600 text-white font-medium rounded-xl hover:bg-brand-700 transition shadow-sm flex justify-center items-center gap-2">
+                            <i class="fa-solid fa-floppy-disk"></i> Guardar Visita
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- VISTA: DETALLE DE VISITA -->
+            <section id="view-detail" class="view-transition hidden-view p-4 sm:p-6 pb-24">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 no-print">
+                    <div class="flex items-center gap-3">
+                        <button onclick="app.showView('dashboard')" class="text-slate-500 hover:text-slate-800 w-10 h-10 rounded-full hover:bg-slate-100 transition flex items-center justify-center">
+                            <i class="fa-solid fa-arrow-left text-xl"></i>
+                        </button>
+                        <h2 class="text-2xl font-bold text-slate-800">Detalle del Reporte</h2>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="app.shareWhatsApp()" class="bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow-sm flex items-center gap-2">
+                            <i class="fa-brands fa-whatsapp text-lg"></i> WhatsApp
+                        </button>
+                        <button onclick="app.shareEmail()" class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow-sm flex items-center gap-2">
+                            <i class="fa-regular fa-envelope text-lg"></i> Correo
+                        </button>
+                        <button onclick="window.print()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-2 rounded-lg text-sm font-medium transition shadow-sm flex items-center gap-2">
+                            <i class="fa-solid fa-print text-lg"></i> PDF / Imprimir
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contenedor del Reporte a Imprimir/Exportar -->
+                <div id="detail-content" class="bg-white p-6 sm:p-8 rounded-xl shadow-sm border border-slate-200">
+                    <!-- El contenido se inyecta via JS -->
+                </div>
+            </section>
+
+            <!-- VISTA: DIRECTORIO DE CLIENTES -->
+            <section id="view-clients" class="view-transition hidden-view p-4 sm:p-6 pb-24">
+                <div class="flex justify-between items-end mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">Directorio de Clientes</h2>
+                        <p class="text-slate-500 text-sm mt-1">Gestión de propiedades y contactos</p>
+                    </div>
+                    <button onclick="app.showView('client-form')" class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg shadow transition flex items-center gap-2 font-medium">
+                        <i class="fa-solid fa-plus"></i> <span class="hidden sm:inline">Nuevo Cliente</span>
+                    </button>
+                </div>
+                <div id="clients-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Clientes via JS -->
+                </div>
+            </section>
+
+            <!-- VISTA: FORMULARIO NUEVO CLIENTE -->
+            <section id="view-client-form" class="view-transition hidden-view p-4 sm:p-6 pb-24">
+                <div class="flex items-center gap-3 mb-6">
+                    <button onclick="app.showView('clients')" class="text-slate-500 hover:text-slate-800 w-10 h-10 rounded-full hover:bg-slate-100 transition flex items-center justify-center">
+                        <i class="fa-solid fa-arrow-left text-xl"></i>
+                    </button>
+                    <h2 class="text-2xl font-bold text-slate-800">Registrar Cliente</h2>
+                </div>
+                <form id="client-form" onsubmit="app.saveClient(event)">
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="sm:col-span-2">
+                            <label class="block text-sm font-medium text-slate-600 mb-1">Nombre de Propiedad / Cliente *</label>
+                            <input type="text" id="fc_name" required placeholder="Ej. Condominio Los Robles" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none">
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-sm font-medium text-slate-600 mb-1">Dirección Exacta</label>
+                            <input type="text" id="fc_address" placeholder="Ej. Av. Los Robles 123" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 mb-1">Persona de Contacto</label>
+                            <input type="text" id="fc_contact" placeholder="Nombre de quien recibe" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 mb-1">Teléfono</label>
+                            <input type="tel" id="fc_phone" placeholder="+56 9 0000 0000" class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500 outline-none">
+                        </div>
+                    </div>
+                    <div class="flex gap-3">
+                        <button type="button" onclick="app.showView('clients')" class="flex-1 px-4 py-3 bg-white border border-slate-300 text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition shadow-sm">Cancelar</button>
+                        <button type="submit" class="flex-[2] px-4 py-3 bg-brand-600 text-white font-medium rounded-xl hover:bg-brand-700 transition shadow-sm flex justify-center items-center gap-2"><i class="fa-solid fa-save"></i> Guardar Cliente</button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- VISTA: DETALLE CLIENTE -->
+            <section id="view-client-detail" class="view-transition hidden-view p-4 sm:p-6 pb-24">
+                <div class="flex items-center gap-3 mb-6">
+                    <button onclick="app.showView('clients')" class="text-slate-500 hover:text-slate-800 w-10 h-10 rounded-full hover:bg-slate-100 transition flex items-center justify-center">
+                        <i class="fa-solid fa-arrow-left text-xl"></i>
+                    </button>
+                    <h2 class="text-2xl font-bold text-slate-800">Detalle del Cliente</h2>
+                </div>
+                <div id="client-detail-content" class="space-y-6">
+                    <!-- Detalle via JS -->
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- Contenedor de Toasts -->
+    <div id="toast-container"></div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        const app = {
+            // Estado de la aplicación
+            visits: [],
+            clients: [],
+            currentVisitId: null,
+            pendingPhotos: [], // Array temporal para las fotos mientras se llena el formulario
+            
+            // Opciones de categorías para materiales
+            materialCategories: [
+                "CCTV y Redes",
+                "Canalización/Eléctrico",
+                "Herramientas/Maquinaria",
+                "Jardinería",
+                "Limpieza Profunda",
+                "Otros"
+            ],
+
+            init() {
+                // Cargar datos dummy para demostración
+                this.loadDummyData();
+                this.renderVisitsList();
+                this.renderClientsList();
+                this.populateClientSelect();
+                
+                // Asegurar al menos una fila de material vacía
+                this.addMaterialRow();
+            },
+
+            // --- Navegación ---
+            showView(viewId) {
+                // Ocultar todas
+                document.querySelectorAll('.view-transition').forEach(view => {
+                    if (view.classList.contains('active-view')) {
+                        view.classList.replace('active-view', 'hidden-view');
+                    }
+                });
+                
+                // Mostrar solicitada
+                document.getElementById(`view-${viewId}`).classList.replace('hidden-view', 'active-view');
+                
+                // Reset form si vamos al formulario
+                if(viewId === 'form') {
+                    document.getElementById('visit-form').reset();
+                    this.populateClientSelect(); // Asegurar opciones actualizadas
+                    document.getElementById('materials-container').innerHTML = '';
+                    this.addMaterialRow();
+                    
+                    // Resetear fotos
+                    this.pendingPhotos = [];
+                    this.renderPhotoPreviews();
+                    
+                    // Setear hora actual por defecto
+                    const now = new Date();
+                    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                    document.getElementById('f_datetime').value = now.toISOString().slice(0,16);
+                } else if (viewId === 'client-form') {
+                    document.getElementById('client-form').reset();
+                } else if (viewId === 'clients') {
+                    this.renderClientsList();
+                }
+            },
+
+            // --- Gestión de Clientes ---
+            populateClientSelect() {
+                const select = document.getElementById('f_client_id');
+                if(!select) return;
+                select.innerHTML = this.clients.length === 0 
+                    ? '<option value="" disabled selected>No hay clientes registrados</option>'
+                    : this.clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            },
+
+            saveClient(event) {
+                event.preventDefault();
+                const newClient = {
+                    id: Date.now(),
+                    name: document.getElementById('fc_name').value,
+                    address: document.getElementById('fc_address').value,
+                    contact: document.getElementById('fc_contact').value,
+                    phone: document.getElementById('fc_phone').value,
+                    status: 'Activo'
+                };
+                this.clients.unshift(newClient);
+                this.showToast('Cliente registrado exitosamente', 'success');
+                this.showView('clients');
+            },
+
+            renderClientsList() {
+                const list = document.getElementById('clients-list');
+                if (!list) return;
+                
+                if (this.clients.length === 0) {
+                    list.innerHTML = `<div class="col-span-full text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                            <i class="fa-solid fa-users-slash text-4xl text-slate-300 mb-3"></i>
+                            <p class="text-slate-500">No hay clientes registrados.</p>
+                        </div>`;
+                    return;
+                }
+
+                list.innerHTML = this.clients.map(c => `
+                    <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition cursor-pointer" onclick="app.showClientDetail(${c.id})">
+                        <div class="flex items-start gap-3 mb-3">
+                            <div class="w-10 h-10 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-bold shrink-0">
+                                ${c.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-800 line-clamp-1" title="${c.name}">${c.name}</h4>
+                                <p class="text-sm text-slate-500 line-clamp-1"><i class="fa-solid fa-location-dot text-slate-400"></i> ${c.address || 'Sin dirección'}</p>
+                            </div>
+                        </div>
+                        <div class="pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-sm">
+                            <div class="text-slate-600 truncate" title="${c.contact}"><i class="fa-regular fa-user text-slate-400"></i> ${c.contact || '-'}</div>
+                            <div class="text-slate-600 truncate"><i class="fa-solid fa-phone text-slate-400"></i> ${c.phone || '-'}</div>
+                        </div>
+                    </div>
+                `).join('');
+            },
+
+            showClientDetail(id) {
+                const client = this.clients.find(c => c.id === id);
+                if(!client) return;
+
+                // Buscar visitas vinculadas al ID o por nombre (retrocompatibilidad)
+                const clientVisits = this.visits.filter(v => v.clientId === id || v.clientName === client.name || v.client === client.name);
+
+                const historyHtml = clientVisits.length === 0 
+                    ? '<p class="text-slate-500 italic text-sm p-4 text-center">No hay visitas registradas para este cliente.</p>'
+                    : clientVisits.map(v => {
+                        const d = new Date(v.datetime).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+                        return `
+                        <div class="flex justify-between items-center p-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 transition cursor-pointer" onclick="app.showDetail(${v.id})">
+                            <div>
+                                <p class="font-medium text-slate-700 text-sm">${d} - ${v.status}</p>
+                                <p class="text-xs text-slate-500">${v.tasks.length} tareas • ${v.tech}</p>
+                            </div>
+                            <i class="fa-solid fa-chevron-right text-slate-400 text-sm"></i>
+                        </div>
+                        `;
+                    }).join('');
+
+                const container = document.getElementById('client-detail-content');
+                container.innerHTML = `
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
+                        <div class="absolute top-0 right-0 w-32 h-32 bg-brand-50 rounded-bl-full -z-0 opacity-50"></div>
+                        <div class="relative z-10 flex items-center gap-4 mb-6">
+                            <div class="w-16 h-16 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-2xl shadow-inner shrink-0">
+                                ${client.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                                <h3 class="text-xl sm:text-2xl font-bold text-slate-800 leading-tight">${client.name}</h3>
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 mt-2">
+                                    <span class="w-2 h-2 rounded-full bg-green-500"></span> ${client.status}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 relative z-10">
+                            <div class="flex items-start gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                <i class="fa-solid fa-location-dot text-brand-500 mt-1 w-4 text-center"></i>
+                                <div>
+                                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Dirección</p>
+                                    <p class="text-sm font-medium text-slate-800">${client.address || 'No registrada'}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                <i class="fa-regular fa-user text-brand-500 mt-1 w-4 text-center"></i>
+                                <div>
+                                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Contacto</p>
+                                    <p class="text-sm font-medium text-slate-800">${client.contact || 'No registrado'}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100 sm:col-span-2">
+                                <i class="fa-solid fa-phone text-brand-500 mt-1 w-4 text-center"></i>
+                                <div>
+                                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-0.5">Teléfono</p>
+                                    <p class="text-sm font-medium text-slate-800">${client.phone || 'No registrado'}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-4 sm:p-6 rounded-xl border border-slate-200 shadow-sm">
+                        <h4 class="font-bold text-slate-800 mb-4 flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left text-brand-500"></i> Historial de Visitas</h4>
+                        <div class="border border-slate-100 rounded-lg overflow-hidden">
+                            ${historyHtml}
+                        </div>
+                        <button onclick="app.showView('form'); setTimeout(() => document.getElementById('f_client_id').value = '${client.id}', 50);" class="w-full mt-4 py-2.5 bg-brand-50 text-brand-700 hover:bg-brand-100 rounded-lg font-medium transition text-sm flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-calendar-plus"></i> Agendar nueva visita
+                        </button>
+                    </div>
+                `;
+
+                this.showView('client-detail');
+            },
+
+            // --- Gestión de Fotografías ---
+            handlePhotoUpload(event) {
+                const files = event.target.files;
+                if (!files || files.length === 0) return;
+
+                // Mostrar toast de carga si son muchas fotos
+                if(files.length > 2) this.showToast('Procesando imágenes...', 'success');
+
+                Array.from(files).forEach(file => {
+                    if (!file.type.startsWith('image/')) return;
+                    
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        this.pendingPhotos.push(e.target.result);
+                        this.renderPhotoPreviews();
+                    };
+                    // Convertimos la imagen a base64 para poder mostrarla e imprimirla fácilmente
+                    reader.readAsDataURL(file);
+                });
+                
+                // Limpiar el input para permitir subir la misma foto si se elimina por error
+                event.target.value = '';
+            },
+
+            renderPhotoPreviews() {
+                const container = document.getElementById('photo-preview-container');
+                if (this.pendingPhotos.length === 0) {
+                    container.innerHTML = '<p class="text-xs text-slate-400 col-span-full italic">No hay fotos adjuntas.</p>';
+                    return;
+                }
+
+                container.innerHTML = this.pendingPhotos.map((src, index) => `
+                    <div class="relative aspect-square rounded-lg overflow-hidden border border-slate-200 shadow-sm group">
+                        <img src="${src}" class="w-full h-full object-cover">
+                        <button type="button" onclick="app.removePendingPhoto(${index})" class="absolute top-1 right-1 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center opacity-90 hover:opacity-100 transition shadow">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                `).join('');
+            },
+
+            removePendingPhoto(index) {
+                this.pendingPhotos.splice(index, 1);
+                this.renderPhotoPreviews();
+            },
+
+            // --- Gestión de Materiales Dinámicos ---
+            addMaterialRow() {
+                const container = document.getElementById('materials-container');
+                const rowId = 'mat_' + Date.now();
+                
+                const row = document.createElement('div');
+                row.className = 'flex flex-col sm:flex-row gap-2 bg-slate-50 sm:bg-transparent p-3 sm:p-0 rounded-lg sm:rounded-none border sm:border-none border-slate-200 material-item';
+                row.id = rowId;
+
+                // Select de categoría
+                let catOptions = this.materialCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+                
+                row.innerHTML = `
+                    <select class="mat-category sm:w-1/3 px-3 py-2 rounded-lg border border-slate-300 focus:ring-1 focus:ring-brand-500 outline-none text-sm bg-white">
+                        ${catOptions}
+                    </select>
+                    <input type="text" placeholder="Detalle (Ej. Cable UTP, Cloro)" class="mat-desc flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-1 focus:ring-brand-500 outline-none text-sm">
+                    <div class="flex gap-2 sm:w-1/4">
+                        <input type="number" placeholder="Cant." min="0" step="0.1" class="mat-qty w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-1 focus:ring-brand-500 outline-none text-sm">
+                        <button type="button" onclick="app.removeMaterialRow('${rowId}')" class="w-10 shrink-0 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg transition flex justify-center items-center">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                `;
+                
+                container.appendChild(row);
+            },
+
+            removeMaterialRow(rowId) {
+                const row = document.getElementById(rowId);
+                if (row) row.remove();
+            },
+
+            // --- Guardar Formulario ---
+            saveVisit(event) {
+                event.preventDefault();
+
+                // Recolectar tareas
+                const tasksCheckboxes = document.querySelectorAll('input[name="tasks"]:checked');
+                const selectedTasks = Array.from(tasksCheckboxes).map(cb => cb.value);
+
+                // Recolectar materiales (solo los que tienen descripción o cantidad)
+                const materialRows = document.querySelectorAll('.material-item');
+                const materials = [];
+                materialRows.forEach(row => {
+                    const cat = row.querySelector('.mat-category').value;
+                    const desc = row.querySelector('.mat-desc').value.trim();
+                    const qty = row.querySelector('.mat-qty').value;
+                    if(desc !== '' || qty !== '') {
+                        materials.push({ category: cat, description: desc, quantity: qty || 1 });
+                    }
+                });
+
+                // Obtener datos del cliente seleccionado
+                const clientSelect = document.getElementById('f_client_id');
+                const clientId = clientSelect.value ? parseInt(clientSelect.value) : null;
+                const clientName = clientSelect.options.length > 0 && clientSelect.selectedIndex !== -1 
+                    ? clientSelect.options[clientSelect.selectedIndex].text 
+                    : 'Cliente no especificado';
+
+                // Crear objeto Visita
+                const newVisit = {
+                    id: Date.now(),
+                    clientId: clientId,
+                    clientName: clientName,
+                    datetime: document.getElementById('f_datetime').value,
+                    tech: document.getElementById('f_tech').value || 'Sin asignar',
+                    priority: document.getElementById('f_priority').value,
+                    tasks: selectedTasks,
+                    materials: materials,
+                    notes: document.getElementById('f_notes').value,
+                    photos: [...this.pendingPhotos], // Guardar las fotos adjuntas
+                    status: 'Programada'
+                };
+
+                // Guardar en el array (estado en memoria)
+                this.visits.unshift(newVisit); // Agregar al inicio
+
+                // UI Updates
+                this.renderVisitsList();
+                this.showView('dashboard');
+                this.showToast('Visita programada exitosamente', 'success');
+            },
+
+            // --- Renderizar Dashboard ---
+            renderVisitsList() {
+                const listContainer = document.getElementById('visits-list');
+                listContainer.innerHTML = '';
+
+                if(this.visits.length === 0) {
+                    listContainer.innerHTML = `
+                        <div class="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                            <i class="fa-solid fa-clipboard-list text-4xl text-slate-300 mb-3"></i>
+                            <p class="text-slate-500">No hay visitas programadas.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                this.visits.forEach(visit => {
+                    // Formatear fecha
+                    const dateObj = new Date(visit.datetime);
+                    const dateStr = dateObj.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+                    const timeStr = dateObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute:'2-digit' });
+
+                    // Color por prioridad
+                    let priorityColor = 'bg-green-100 text-green-700';
+                    if(visit.priority === 'Media') priorityColor = 'bg-yellow-100 text-yellow-700';
+                    if(visit.priority === 'Alta') priorityColor = 'bg-red-100 text-red-700';
+
+                    // Resumen de tareas y materiales
+                    const tasksCount = visit.tasks.length;
+                    const matCount = visit.materials.length;
+
+                    const displayName = visit.clientName || visit.client || 'Cliente Desconocido';
+
+                    const card = document.createElement('div');
+                    card.className = 'bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition cursor-pointer relative overflow-hidden';
+                    // Pequeña barra lateral decorativa
+                    card.innerHTML = `
+                        <div class="absolute left-0 top-0 bottom-0 w-1 ${visit.priority === 'Alta' ? 'bg-red-500' : (visit.priority === 'Media' ? 'bg-yellow-500' : 'bg-brand-500')}"></div>
+                        <div class="flex justify-between items-start mb-2 pl-2">
+                            <div>
+                                <h4 class="font-bold text-slate-800 text-lg">${displayName}</h4>
+                                <div class="flex items-center gap-2 text-sm text-slate-500 mt-1">
+                                    <i class="fa-regular fa-calendar"></i> ${dateStr} &nbsp; 
+                                    <i class="fa-regular fa-clock"></i> ${timeStr}
+                                </div>
+                            </div>
+                            <span class="text-xs font-semibold px-2 py-1 rounded-md ${priorityColor}">
+                                ${visit.priority}
+                            </span>
+                        </div>
+                        
+                        <div class="pl-2 mt-3 grid grid-cols-2 gap-2 text-sm">
+                            <div class="flex items-center gap-2 text-slate-600">
+                                <i class="fa-solid fa-user-gear text-slate-400"></i> ${visit.tech}
+                            </div>
+                            <div class="flex items-center gap-2 text-slate-600">
+                                <i class="fa-solid fa-list-check text-slate-400"></i> ${tasksCount} Tareas
+                            </div>
+                            <div class="flex items-center gap-2 text-slate-600 col-span-2">
+                                <i class="fa-solid fa-box-open text-slate-400"></i> ${matCount} Insumos registrados
+                            </div>
+                            ${visit.photos && visit.photos.length > 0 ? `
+                            <div class="flex items-center gap-2 text-slate-600 col-span-2 mt-1">
+                                <i class="fa-solid fa-camera text-brand-500"></i> ${visit.photos.length} Fotografías
+                            </div>` : ''}
+                        </div>
+                        
+                        <div class="pl-2 mt-3 pt-3 border-t border-slate-100 flex justify-between items-center">
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+                                <span class="w-2 h-2 rounded-full bg-slate-400"></span> ${visit.status}
+                            </span>
+                            <button onclick="app.showDetail(${visit.id})" class="text-brand-600 text-sm font-medium hover:underline">Ver Reporte</button>
+                        </div>
+                    `;
+                    listContainer.appendChild(card);
+                });
+            },
+
+            // --- Ver Detalles y Exportación ---
+            showDetail(id) {
+                const visit = this.visits.find(v => v.id === id);
+                if (!visit) return;
+                
+                this.currentVisitId = id;
+                this.renderDetailContent(visit);
+                this.showView('detail');
+            },
+
+            renderDetailContent(visit) {
+                const container = document.getElementById('detail-content');
+                const dateObj = new Date(visit.datetime);
+                const dateStr = dateObj.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                const timeStr = dateObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute:'2-digit' });
+
+                let tasksHtml = visit.tasks.length > 0 
+                    ? visit.tasks.map(t => `<li class="flex items-start gap-2 text-slate-700 mb-1"><i class="fa-solid fa-check text-green-500 mt-1"></i> ${t}</li>`).join('')
+                    : '<li class="text-slate-500 italic">No se registraron tareas específicas.</li>';
+
+                let materialsHtml = visit.materials.length > 0
+                    ? visit.materials.map(m => `
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2 text-slate-700 text-sm font-medium">${m.category}</td>
+                            <td class="py-2 text-slate-600 text-sm">${m.description}</td>
+                            <td class="py-2 text-slate-700 text-sm text-right font-semibold">${m.quantity}</td>
+                        </tr>`).join('')
+                    : '<tr><td colspan="3" class="py-2 text-slate-500 italic text-sm text-center">No se registraron insumos o materiales.</td></tr>';
+
+                container.innerHTML = `
+                    <div class="border-b border-slate-200 pb-6 mb-6">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h1 class="text-3xl font-bold text-slate-800 mb-1">Reporte de Servicio</h1>
+                                <p class="text-brand-600 font-medium">Casacustodia</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="inline-block px-3 py-1 bg-slate-100 text-slate-700 rounded-lg text-sm font-semibold mb-2">ID: #${visit.id.toString().slice(-6)}</span>
+                                <p class="text-sm text-slate-500">Emitido el: ${new Date().toLocaleDateString('es-ES')}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <div>
+                                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Cliente / Propiedad</p>
+                                <p class="text-slate-800 font-medium">${visit.clientName || visit.client}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Fecha y Hora</p>
+                                <p class="text-slate-800 font-medium capitalize">${dateStr} - ${timeStr} hrs</p>
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Técnico Asignado</p>
+                                <p class="text-slate-800 font-medium">${visit.tech}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Estado</p>
+                                <p class="text-slate-800 font-medium">${visit.status}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-8">
+                        <h3 class="text-lg font-bold text-slate-800 mb-4 border-l-4 border-brand-500 pl-3">Trabajos Realizados</h3>
+                        <ul class="ml-2">
+                            ${tasksHtml}
+                        </ul>
+                    </div>
+
+                    <div class="mb-8">
+                        <h3 class="text-lg font-bold text-slate-800 mb-4 border-l-4 border-brand-500 pl-3">Materiales e Insumos Usados</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="border-b-2 border-slate-200">
+                                        <th class="pb-2 text-slate-500 font-semibold text-sm">Categoría</th>
+                                        <th class="pb-2 text-slate-500 font-semibold text-sm">Descripción</th>
+                                        <th class="pb-2 text-slate-500 font-semibold text-sm text-right">Cantidad</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${materialsHtml}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    ${visit.notes ? `
+                    <div class="mb-6 bg-yellow-50 p-4 rounded-xl border border-yellow-100">
+                        <h3 class="text-sm font-bold text-yellow-800 mb-2 flex items-center gap-2"><i class="fa-solid fa-circle-info"></i> Observaciones</h3>
+                        <p class="text-yellow-700 text-sm whitespace-pre-line">${visit.notes}</p>
+                    </div>
+                    ` : ''}
+
+                    ${visit.photos && visit.photos.length > 0 ? `
+                    <div class="mb-8" style="page-break-inside: avoid;">
+                        <h3 class="text-lg font-bold text-slate-800 mb-4 border-l-4 border-brand-500 pl-3">Registro Fotográfico</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            ${visit.photos.map(src => `
+                                <div class="aspect-square rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                                    <img src="${src}" class="w-full h-full object-cover">
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <div class="mt-10 pt-8 border-t border-slate-200 text-center text-slate-400 text-sm flex flex-col items-center">
+                        <div class="w-8 h-8 rounded-lg bg-slate-100 text-slate-400 flex items-center justify-center font-bold mb-2">C</div>
+                        <p>Documento oficial generado por Casacustodia.</p>
+                    </div>
+                `;
+            },
+
+            generateReportText(visit) {
+                const dateObj = new Date(visit.datetime);
+                const dateStr = dateObj.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+                
+                let text = `*🏠 REPORTE CASACUSTODIA*\n`;
+                text += `--------------------------------\n`;
+                text += `*Cliente:* ${visit.clientName || visit.client}\n`;
+                text += `*Fecha:* ${dateStr} - ${dateObj.toLocaleTimeString('es-ES', { hour: '2-digit', minute:'2-digit' })}\n`;
+                text += `*Técnico:* ${visit.tech}\n`;
+                text += `*Estado:* ${visit.status}\n\n`;
+
+                text += `*✅ TRABAJOS REALIZADOS:*\n`;
+                if(visit.tasks.length > 0) {
+                    visit.tasks.forEach(t => text += `- ${t}\n`);
+                } else {
+                    text += `- Sin tareas específicas\n`;
+                }
+
+                text += `\n*📦 MATERIALES/INSUMOS:* \n`;
+                if(visit.materials.length > 0) {
+                    visit.materials.forEach(m => text += `- ${m.quantity}x ${m.description} (${m.category})\n`);
+                } else {
+                    text += `- Ninguno\n`;
+                }
+
+                if(visit.notes) {
+                    text += `\n*📝 OBSERVACIONES:*\n${visit.notes}\n`;
+                }
+
+                if(visit.photos && visit.photos.length > 0) {
+                    text += `\n📸 _Se adjuntan ${visit.photos.length} fotografías en el reporte oficial._\n`;
+                }
+                
+                return text;
+            },
+
+            shareWhatsApp() {
+                if(!this.currentVisitId) return;
+                const visit = this.visits.find(v => v.id === this.currentVisitId);
+                const text = this.generateReportText(visit);
+                // Usar la API de WhatsApp para abrir el chat con el texto prellenado
+                const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+                window.open(url, '_blank');
+            },
+
+            shareEmail() {
+                if(!this.currentVisitId) return;
+                const visit = this.visits.find(v => v.id === this.currentVisitId);
+                const text = this.generateReportText(visit);
+                const clientDisplayName = visit.clientName || visit.client;
+                const subject = `Reporte de Servicio Casacustodia - ${clientDisplayName}`;
+                const url = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+                window.open(url, '_blank');
+            },
+
+            // --- Utilidades ---
+            showToast(message, type = 'success') {
+                const container = document.getElementById('toast-container');
+                const toast = document.createElement('div');
+                toast.className = `toast ${type}`;
+                toast.innerHTML = message;
+                
+                container.appendChild(toast);
+
+                // Remover después de 3 segundos
+                setTimeout(() => {
+                    toast.style.animation = 'fadeOut 0.3s ease forwards';
+                    setTimeout(() => toast.remove(), 300);
+                }, 3000);
+            },
+
+            loadDummyData() {
+                // Datos de prueba para que la vista no esté vacía al cargar
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                
+                this.clients = [
+                    { id: 101, name: "Condominio Los Robles - Casa 12", address: "Av. Los Robles 123", contact: "Juan Pérez", phone: "+56 9 1234 5678", status: "Activo" },
+                    { id: 102, name: "Familia Soto - Las Quilas 450", address: "Las Quilas 450", contact: "María Soto", phone: "+56 9 8765 4321", status: "Activo" },
+                    { id: 103, name: "Edificio Vista Lago", address: "O'Higgins 789", contact: "Administración", phone: "+56 9 5555 4444", status: "Activo" }
+                ];
+                
+                this.visits = [
+                    {
+                        id: 1,
+                        clientId: 101,
+                        clientName: "Condominio Los Robles - Casa 12",
+                        datetime: tomorrow.toISOString().slice(0,16),
+                        tech: "Carlos Muñoz (Jardinería)",
+                        priority: "Media",
+                        tasks: ["Corte de pasto y orillado", "Limpieza canaletas"],
+                        materials: [{category: "Jardinería", description: "Hilo orilladora", quantity: 1}],
+                        notes: "Revisar aspersor trasero que gotea.",
+                        status: "Programada"
+                    },
+                    {
+                        id: 2,
+                        clientId: 102,
+                        clientName: "Familia Soto - Las Quilas 450",
+                        datetime: new Date().toISOString().slice(0,16),
+                        tech: "Equipo Seguridad",
+                        priority: "Alta",
+                        tasks: ["Revisión motor portón", "Mantenimiento Alarmas"],
+                        materials: [{category: "Canalización/Eléctrico", description: "Cable 1.5mm", quantity: 5}],
+                        notes: "El portón no cierra completamente.",
+                        status: "En Curso"
+                    }
+                ];
+            }
+        };
+
+        // Iniciar app al cargar la página
+        window.addEventListener('DOMContentLoaded', () => {
+            app.init();
+        });
+    </script>
+</body>
+</html>
